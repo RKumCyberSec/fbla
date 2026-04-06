@@ -1,3 +1,4 @@
+import * as Haptics from "expo-haptics";
 import { useAuth } from '@clerk/expo'
 import { Redirect, Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -58,15 +59,18 @@ function CustomTabBar({ state, navigation, collapsed }: any) {
   const tabWidth = barWidth > 0 ? barWidth / state.routes.length : 0
 
   useEffect(() => {
-    if (!tabWidth) return
+  if (!tabWidth) return
 
-    Animated.spring(indicatorX, {
-      toValue: state.index * tabWidth,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 120,
-    }).start()
-  }, [state.index, tabWidth, indicatorX])
+  // 🔥 HAPTIC FEEDBACK ON TAB CHANGE (swipe OR tap)
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+
+  Animated.spring(indicatorX, {
+    toValue: state.index * tabWidth,
+    useNativeDriver: true,
+    friction: 8,
+    tension: 120,
+  }).start()
+}, [state.index, tabWidth, indicatorX])
 
   useEffect(() => {
     Animated.parallel([

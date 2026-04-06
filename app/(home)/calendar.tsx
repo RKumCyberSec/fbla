@@ -1,387 +1,757 @@
-import { Ionicons } from '@expo/vector-icons'
-import { useUser } from '@clerk/expo'
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState } from "react";
 import {
-  Image,
   Modal,
   Pressable,
+  
   ScrollView,
   Text,
+  TextInput,
   View,
-  useWindowDimensions,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import SwipeScreen from '@/components/SwipeScreen'
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-type FeedFilter = 'All' | 'Posts' | 'Announcements'
+type EventItem = {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string;
+  location: string;
+  type: "Event" | "Competition" | "Reminder";
+  description: string;
+};
 
-const POSTS = [
+type ResourceItem = {
+  id: string;
+  title: string;
+  category: "Guide" | "Document" | "Form" | "Competition Prep";
+  description: string;
+  updatedAt: string;
+};
+
+const initialEvents: EventItem[] = [
   {
-    id: 'post-1',
-    title: 'Registration Open for State Leadership Conference',
-    body: 'Get ready for one of the biggest FBLA events of the year. Stay on top of deadlines, updates, and chapter preparation.',
-    meta: '2 hours ago · FBLA News',
+    id: "1",
+    title: "Chapter Meeting",
+    date: "2026-04-08",
+    time: "3:30 PM",
+    location: "Business Lab Room 201",
+    type: "Event",
+    description: "Weekly FBLA chapter meeting with officer updates and announcements.",
   },
   {
-    id: 'post-2',
-    title: 'Chapter Officer Spotlight',
-    body: 'See how student leaders are building confidence, communication, and competitive success through FBLA.',
-    meta: '5 hours ago · Leadership',
-  },
-]
-
-const ANNOUNCEMENTS = [
-  {
-    id: 'announce-1',
-    title: 'New Competitive Event Guidelines Released',
-    body: 'Updated rubrics and preparation resources are now available for members.',
-    tag: 'UPDATE',
+    id: "2",
+    title: "State Leadership Registration Deadline",
+    date: "2026-04-11",
+    time: "11:59 PM",
+    location: "Online Submission",
+    type: "Reminder",
+    description: "Final day to register for the State Leadership Conference.",
   },
   {
-    id: 'announce-2',
-    title: 'Monthly Chapter Meeting This Friday',
-    body: 'Be ready with your notes, project updates, and event questions.',
-    tag: 'REMINDER',
+    id: "3",
+    title: "Public Speaking Practice",
+    date: "2026-04-15",
+    time: "4:15 PM",
+    location: "Auditorium",
+    type: "Competition",
+    description: "Mock presentation session for competitive event preparation.",
   },
-]
+  {
+    id: "4",
+    title: "Networking Workshop",
+    date: "2026-04-19",
+    time: "2:00 PM",
+    location: "Media Center",
+    type: "Event",
+    description: "Interactive workshop on networking and professional communication.",
+  },
+];
 
-const FEED_FILTERS: FeedFilter[] = ['All', 'Posts', 'Announcements']
+const initialResources: ResourceItem[] = [
+  {
+    id: "r1",
+    title: "FBLA Competition Guidelines",
+    category: "Guide",
+    description: "Overview of event rules, scoring criteria, and preparation tips.",
+    updatedAt: "2026-04-01",
+  },
+  {
+    id: "r2",
+    title: "Membership Handbook",
+    category: "Document",
+    description: "Everything members need to know about participation, dress code, and leadership.",
+    updatedAt: "2026-03-27",
+  },
+  {
+    id: "r3",
+    title: "Conference Permission Form",
+    category: "Form",
+    description: "Sample form students can use for conference attendance approval.",
+    updatedAt: "2026-03-30",
+  },
+  {
+    id: "r4",
+    title: "Interview Event Prep Sheet",
+    category: "Competition Prep",
+    description: "Common interview questions and answer structure examples.",
+    updatedAt: "2026-04-03",
+  },
+];
 
-const EVENT_CALENDAR = [
-  { day: 'Tue, Mar 18', label: 'Opening Session + Networking' },
-  { day: 'Wed, Mar 19', label: 'Competition Round 1' },
-  { day: 'Thu, Mar 20', label: 'Leadership Workshops + Finals' },
-  { day: 'Fri, Mar 21', label: 'Awards + Closing Ceremony' },
-]
+const formatMonthYear = (date: Date) =>
+  date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-const STATE_LEADERSHIP_CONFERENCE = {
-  title: 'State Leadership Conference',
-  subtitle: 'Starts Mar 18, 2027',
-  startDate: '2027-03-18T08:00:00',
-}
+const formatDayName = (date: Date) =>
+  date.toLocaleDateString("en-US", { weekday: "short" });
 
-function getCountdown(targetDate: string) {
-  const target = new Date(targetDate)
-  const now = new Date()
-  const diffMs = target.getTime() - now.getTime()
+const toDateKey = (date: Date) => {
+  const y = date.getFullYear();
+  const m = `${date.getMonth() + 1}`.padStart(2, "0");
+  const d = `${date.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
 
-  if (Number.isNaN(target.getTime()) || diffMs <= 0) {
-    return { days: 0, hours: 0, minutes: 0 }
+const getDaysInMonth = (year: number, month: number) => {
+  const days: Date[] = [];
+  const lastDay = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 1; i <= lastDay; i++) {
+    days.push(new Date(year, month, i));
   }
 
-  const totalMinutes = Math.floor(diffMs / 60000)
-  const days = Math.floor(totalMinutes / (24 * 60))
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
-  const minutes = totalMinutes % 60
+  return days;
+};
 
-  return { days, hours, minutes }
-}
+const typeStyles: Record<EventItem["type"], string> = {
+  Event: "bg-blue-100 text-blue-700",
+  Competition: "bg-purple-100 text-purple-700",
+  Reminder: "bg-amber-100 text-amber-700",
+};
 
-export default function HomePage() {
-  const { user, isLoaded } = useUser()
-  const [calendarVisible, setCalendarVisible] = useState(false)
-  const [activeFeedFilter, setActiveFeedFilter] = useState<FeedFilter>('All')
-  const { width } = useWindowDimensions()
+const resourceStyles: Record<ResourceItem["category"], string> = {
+  Guide: "bg-emerald-100 text-emerald-700",
+  Document: "bg-slate-200 text-slate-700",
+  Form: "bg-pink-100 text-pink-700",
+  "Competition Prep": "bg-indigo-100 text-indigo-700",
+};
 
-  const compactDevice = width < 380
-  const conferenceLogoSize = Math.max(48, Math.min(82, width * 0.17))
-  const conferenceLogoContainerSize = conferenceLogoSize + (compactDevice ? 24 : 30)
-  const conferenceLogoTopInset = compactDevice ? 30 : 42
-  const conferenceLogoRightInset = compactDevice ? 4 : -5
+export default function CalendarResourcesTab() {
+  const today = new Date();
+  const [currentMonth, setCurrentMonth] = useState(
+    new Date(today.getFullYear(), today.getMonth(), 1)
+  );
+  const [selectedDate, setSelectedDate] = useState(toDateKey(today));
+  const [events, setEvents] = useState<EventItem[]>(initialEvents);
+  const [resources, setResources] = useState<ResourceItem[]>(initialResources);
 
-  const countdown = useMemo(
-    () => getCountdown(STATE_LEADERSHIP_CONFERENCE.startDate),
-    []
-  )
+  const [eventModalVisible, setEventModalVisible] = useState(false);
+  const [resourceModalVisible, setResourceModalVisible] = useState(false);
 
-  const name = useMemo(() => {
-    if (!isLoaded) return 'Member'
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
 
-    return (
-      user?.firstName ||
-      user?.fullName ||
-      user?.username ||
-      user?.primaryEmailAddress?.emailAddress?.split('@')[0] ||
-      'Member'
-    )
-  }, [isLoaded, user])
+  const [eventForm, setEventForm] = useState<EventItem>({
+    id: "",
+    title: "",
+    date: toDateKey(today),
+    time: "",
+    location: "",
+    type: "Event",
+    description: "",
+  });
 
-  const profileImageUrl = user?.imageUrl ?? null
-  const showPosts = activeFeedFilter === 'All' || activeFeedFilter === 'Posts'
-  const showAnnouncements =
-    activeFeedFilter === 'All' || activeFeedFilter === 'Announcements'
+  const [resourceForm, setResourceForm] = useState<ResourceItem>({
+    id: "",
+    title: "",
+    category: "Guide",
+    description: "",
+    updatedAt: toDateKey(today),
+  });
+
+  const days = useMemo(() => {
+    return getDaysInMonth(currentMonth.getFullYear(), currentMonth.getMonth());
+  }, [currentMonth]);
+
+  const selectedEvents = useMemo(() => {
+    return events
+      .filter((event) => event.date === selectedDate)
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [events, selectedDate]);
+
+  const upcomingEvents = useMemo(() => {
+    return [...events]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+      .slice(0, 4);
+  }, [events]);
+
+  const monthEventDates = useMemo(() => {
+    return new Set(
+      events
+        .filter((event) => {
+          const eventDate = new Date(event.date + "T00:00:00");
+          return (
+            eventDate.getMonth() === currentMonth.getMonth() &&
+            eventDate.getFullYear() === currentMonth.getFullYear()
+          );
+        })
+        .map((event) => event.date)
+    );
+  }, [events, currentMonth]);
+
+  const openAddEvent = () => {
+    setEditingEventId(null);
+    setEventForm({
+      id: "",
+      title: "",
+      date: selectedDate,
+      time: "",
+      location: "",
+      type: "Event",
+      description: "",
+    });
+    setEventModalVisible(true);
+  };
+
+  const openEditEvent = (event: EventItem) => {
+    setEditingEventId(event.id);
+    setEventForm(event);
+    setEventModalVisible(true);
+  };
+
+  const saveEvent = () => {
+    if (!eventForm.title.trim() || !eventForm.date.trim() || !eventForm.time.trim()) return;
+
+    if (editingEventId) {
+      setEvents((prev) =>
+        prev.map((item) => (item.id === editingEventId ? { ...eventForm, id: editingEventId } : item))
+      );
+    } else {
+      setEvents((prev) => [
+        { ...eventForm, id: Date.now().toString() },
+        ...prev,
+      ]);
+    }
+
+    setEventModalVisible(false);
+  };
+
+  const deleteEvent = (id: string) => {
+    setEvents((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const openAddResource = () => {
+    setEditingResourceId(null);
+    setResourceForm({
+      id: "",
+      title: "",
+      category: "Guide",
+      description: "",
+      updatedAt: toDateKey(today),
+    });
+    setResourceModalVisible(true);
+  };
+
+  const openEditResource = (resource: ResourceItem) => {
+    setEditingResourceId(resource.id);
+    setResourceForm(resource);
+    setResourceModalVisible(true);
+  };
+
+  const saveResource = () => {
+    if (!resourceForm.title.trim() || !resourceForm.description.trim()) return;
+
+    if (editingResourceId) {
+      setResources((prev) =>
+        prev.map((item) =>
+          item.id === editingResourceId
+            ? { ...resourceForm, id: editingResourceId }
+            : item
+        )
+      );
+    } else {
+      setResources((prev) => [
+        { ...resourceForm, id: Date.now().toString() },
+        ...prev,
+      ]);
+    }
+
+    setResourceModalVisible(false);
+  };
+
+  const deleteResource = (id: string) => {
+    setResources((prev) => prev.filter((item) => item.id !== id));
+  };
 
   return (
-      <SwipeScreen>
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-slate-50">
       <ScrollView
-        className="flex-1 bg-white"
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-5 pb-24 pt-4"
+        contentContainerStyle={{ paddingBottom: 40 }}
+        className="flex-1"
       >
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-sm text-[#7B8CA8]">Welcome back</Text>
-            <Text className="mt-1 text-3xl font-bold text-[#1E2535]">
-              Hello, {name}
-            </Text>
-          </View>
-
-          <View className="flex-row items-center gap-2">
-            <Pressable className="h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-[#DCE3F0] bg-white">
-              {profileImageUrl ? (
-                <Image
-                  source={{ uri: profileImageUrl }}
-                  resizeMode="cover"
-                  className="h-full w-full"
-                />
-              ) : (
-                <Ionicons name="person" size={18} color="#4A5A77" />
-              )}
-            </Pressable>
-
-            <Pressable className="h-11 w-11 items-center justify-center rounded-full border border-[#DCE3F0] bg-white">
-              <Ionicons name="notifications" size={18} color="#4A5A77" />
-              <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-[#FF4D4F]" />
-            </Pressable>
-          </View>
-        </View>
-
-        <View className="mt-8 h-px bg-[#DFE6F2]" />
-
-        <View className="mt-6 overflow-hidden rounded-3xl border border-[#2EA6FF]/40 bg-[#1F38D8] p-7">
-          <View
-            className="absolute items-center justify-center"
-            style={{
-              width: conferenceLogoContainerSize,
-              height: conferenceLogoContainerSize,
-              top: conferenceLogoTopInset,
-              right: conferenceLogoRightInset,
-            }}
-          >
-            <View
-              style={{ width: conferenceLogoSize, height: conferenceLogoSize }}
-              className="items-center justify-center rounded-full bg-white/10"
-            >
-              <Text className="text-lg font-bold text-white">FBLA</Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-center gap-2">
-            <View className="rounded-lg bg-[#4E66F5] px-3 py-1.5">
-              <Text className="text-xs font-bold uppercase tracking-wide text-white">
-                Upcoming Event
-              </Text>
-            </View>
-            <Text className="text-sm text-white/85">
-              {STATE_LEADERSHIP_CONFERENCE.subtitle}
-            </Text>
-          </View>
-
-          <Text className="mt-4 text-4xl font-extrabold text-white">
-            {'State Leadership\nConference'}
+        <View className="px-5 pt-4">
+          <Text className="text-3xl font-bold text-slate-900">
+            Calendar & Resources
           </Text>
+          <Text className="mt-1 text-sm text-slate-500">
+            Keep members on track with events, reminders, and important chapter documents.
+          </Text>
+        </View>
 
-          <View className="mt-5 flex-row gap-3">
-            <View className="flex-1 items-center rounded-2xl border border-white/20 bg-white/10 py-3">
-              <Text className="text-2xl font-bold text-white">{countdown.days}</Text>
-              <Text className="mt-1 text-sm font-bold tracking-wide text-white/80">
-                DAYS
+        <View className="mx-5 mt-5 rounded-3xl bg-white p-4 shadow-sm">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-xl font-bold text-slate-900">
+                {formatMonthYear(currentMonth)}
+              </Text>
+              <Text className="text-sm text-slate-500">
+                Tap a day to view that day’s events
               </Text>
             </View>
-            <View className="flex-1 items-center rounded-2xl border border-white/20 bg-white/10 py-3">
-              <Text className="text-2xl font-bold text-white">{countdown.hours}</Text>
-              <Text className="mt-1 text-sm font-bold tracking-wide text-white/80">
-                HOURS
-              </Text>
-            </View>
-            <View className="flex-1 items-center rounded-2xl border border-white/20 bg-white/10 py-3">
-              <Text className="text-2xl font-bold text-white">{countdown.minutes}</Text>
-              <Text className="mt-1 text-sm font-bold tracking-wide text-white/80">
-                MINUTES
-              </Text>
+
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() =>
+                  setCurrentMonth(
+                    new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+                  )
+                }
+                className="rounded-2xl bg-slate-100 px-4 py-2"
+              >
+                <Text className="font-semibold text-slate-700">Prev</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  setCurrentMonth(
+                    new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
+                  )
+                }
+                className="rounded-2xl bg-slate-900 px-4 py-2"
+              >
+                <Text className="font-semibold text-white">Next</Text>
+              </Pressable>
             </View>
           </View>
-        </View>
 
-        <View className="mt-3 flex-row gap-2">
-          <Pressable className="flex-1 flex-row items-center justify-center rounded-xl border border-green-200 bg-green-50 px-3.5 py-2">
-            <Ionicons name="alarm-outline" size={14} color="green" />
-            <Text className="ml-1.5 text-sm font-semibold text-green-700">
-              Set Reminder
-            </Text>
-          </Pressable>
-
-          <Pressable className="flex-1 flex-row items-center justify-center rounded-xl border border-yellow-200 bg-yellow-50 px-3.5 py-2">
-            <Ionicons name="star-outline" size={14} color="#CA8A04" />
-            <Text className="ml-1.5 text-sm font-semibold text-yellow-600">
-              Follow
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setCalendarVisible(true)}
-            className="flex-1 flex-row items-center justify-center rounded-xl border border-[#D6E3FA] bg-[#F5F8FF] px-3.5 py-2"
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mt-4"
           >
-            <Ionicons name="calendar-outline" size={14} color="#365EEB" />
-            <Text className="ml-1.5 text-sm font-semibold text-[#365EEB]">
-              Calendar
-            </Text>
-          </Pressable>
-        </View>
+            <View className="flex-row">
+              {days.map((day) => {
+                const dateKey = toDateKey(day);
+                const isSelected = dateKey === selectedDate;
+                const hasEvent = monthEventDates.has(dateKey);
+                const isToday = dateKey === toDateKey(today);
 
-        <View className="mt-8 flex-row gap-3">
-          <Pressable className="flex-1 rounded-2xl border border-[#D8E6FF] bg-[#F4F8FF] px-4 py-4">
-            <View className="h-10 w-10 items-center justify-center rounded-xl bg-[#DBEAFE]">
-              <Ionicons name="library" size={20} color="#1D4ED8" />
-            </View>
-            <Text className="mt-3 text-base font-bold text-[#1E40AF]">
-              View Resources
-            </Text>
-            <Text className="mt-1 text-xs text-[#5F77A8]">
-              Open study guides and documents
-            </Text>
-          </Pressable>
-
-          <Pressable className="flex-1 rounded-2xl border border-[#E6D8FF] bg-[#F8F4FF] px-4 py-4">
-            <View className="h-10 w-10 items-center justify-center rounded-xl bg-[#E9DDFF]">
-              <Ionicons name="chatbubbles" size={20} color="#7C3AED" />
-            </View>
-            <Text className="mt-3 text-base font-bold text-[#6D28D9]">
-              Community
-            </Text>
-            <Text className="mt-1 text-xs text-[#77619E]">
-              See social posts and chapter updates
-            </Text>
-          </Pressable>
-        </View>
-
-        <View className="mt-8">
-          <Text className="text-2xl font-semibold text-slate-900">News Feed</Text>
-
-          <View className="mt-3 flex-row gap-2">
-            {FEED_FILTERS.map((filter) => {
-              const active = activeFeedFilter === filter
-
-              return (
-                <Pressable
-                  key={filter}
-                  onPress={() => setActiveFeedFilter(filter)}
-                  className={`rounded-full px-4 py-2 ${
-                    active ? 'bg-[#1F39D6]' : 'bg-[#EEF2F7]'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm font-semibold ${
-                      active ? 'text-white' : 'text-[#5F708C]'
+                return (
+                  <Pressable
+                    key={dateKey}
+                    onPress={() => setSelectedDate(dateKey)}
+                    className={`mr-3 w-[72px] rounded-3xl border p-3 ${
+                      isSelected
+                        ? "border-slate-900 bg-slate-900"
+                        : "border-slate-200 bg-slate-50"
                     }`}
                   >
-                    {filter}
-                  </Text>
-                </Pressable>
-              )
-            })}
+                    <Text
+                      className={`text-xs font-medium ${
+                        isSelected ? "text-slate-300" : "text-slate-500"
+                      }`}
+                    >
+                      {formatDayName(day)}
+                    </Text>
+
+                    <Text
+                      className={`mt-1 text-2xl font-bold ${
+                        isSelected ? "text-white" : "text-slate-900"
+                      }`}
+                    >
+                      {day.getDate()}
+                    </Text>
+
+                    <View className="mt-2 flex-row items-center justify-between">
+                      <Text
+                        className={`text-[11px] ${
+                          isSelected ? "text-slate-300" : "text-slate-500"
+                        }`}
+                      >
+                        {isToday ? "Today" : ""}
+                      </Text>
+
+                      {hasEvent ? (
+                        <View
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            isSelected ? "bg-white" : "bg-slate-900"
+                          }`}
+                        />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+
+        <View className="mx-5 mt-5 rounded-3xl bg-white p-4 shadow-sm">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-xl font-bold text-slate-900">
+                Events on {selectedDate}
+              </Text>
+              <Text className="text-sm text-slate-500">
+                Manage chapter activities and reminders
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={openAddEvent}
+              className="rounded-2xl bg-slate-900 px-4 py-3"
+            >
+              <Text className="font-semibold text-white">Add Event</Text>
+            </Pressable>
           </View>
 
-          <View className="mt-3 gap-3">
-            {showPosts
-              ? POSTS.map((post) => (
-                  <View
-                    key={post.id}
-                    className="rounded-2xl border border-[#E2E9F4] bg-white px-4 py-4"
-                  >
-                    <View className="self-start rounded-full bg-[#EEF3FF] px-3 py-1">
-                      <Text className="text-xs font-bold text-[#365EEB]">POST</Text>
-                    </View>
-                    <Text className="mt-2 text-xs text-[#8DA0BE]">{post.meta}</Text>
-                    <Text className="mt-2 text-xl font-bold leading-7 text-[#1E2535]">
-                      {post.title}
-                    </Text>
-                    <Text className="mt-2 text-base leading-6 text-[#637590]">
-                      {post.body}
-                    </Text>
-                  </View>
-                ))
-              : null}
+          <View className="mt-4">
+            {selectedEvents.length === 0 ? (
+              <View className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                <Text className="text-base font-semibold text-slate-800">
+                  No events scheduled
+                </Text>
+                <Text className="mt-1 text-sm text-slate-500">
+                  Add a meeting, deadline, competition, or reminder for this day.
+                </Text>
+              </View>
+            ) : (
+              selectedEvents.map((event) => (
+                <View
+                  key={event.id}
+                  className="mb-3 rounded-3xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <View className="flex-row items-start justify-between">
+                    <View className="flex-1 pr-3">
+                      <View className="flex-row items-center gap-2">
+                        <Text className="text-lg font-bold text-slate-900">
+                          {event.title}
+                        </Text>
+                        <View
+                          className={`rounded-full px-3 py-1 ${typeStyles[event.type]}`}
+                        >
+                          <Text className="text-xs font-semibold">
+                            {event.type}
+                          </Text>
+                        </View>
+                      </View>
 
-            {showAnnouncements
-              ? ANNOUNCEMENTS.map((item) => (
-                  <View
-                    key={item.id}
-                    className="rounded-2xl border border-[#E2E9F4] bg-white px-4 py-4"
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="rounded-full bg-[#EAF8F0] px-3 py-1">
-                        <Text className="text-xs font-bold text-[#1EA867]">
-                          {item.tag}
+                      <Text className="mt-2 text-sm text-slate-600">
+                        {event.time} • {event.location}
+                      </Text>
+
+                      <Text className="mt-2 text-sm leading-5 text-slate-500">
+                        {event.description}
+                      </Text>
+                    </View>
+
+                    <View className="gap-2">
+                      <Pressable
+                        onPress={() => openEditEvent(event)}
+                        className="rounded-xl bg-white px-3 py-2"
+                      >
+                        <Text className="font-medium text-slate-700">Edit</Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => deleteEvent(event.id)}
+                        className="rounded-xl bg-red-50 px-3 py-2"
+                      >
+                        <Text className="font-medium text-red-600">Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        <View className="mx-5 mt-5 rounded-3xl bg-white p-4 shadow-sm">
+          <Text className="text-xl font-bold text-slate-900">
+            Upcoming Highlights
+          </Text>
+          <Text className="mt-1 text-sm text-slate-500">
+            Quick view of the next important dates
+          </Text>
+
+          <View className="mt-4">
+            {upcomingEvents.map((event) => (
+              <View
+                key={event.id}
+                className="mb-3 flex-row items-center justify-between rounded-2xl bg-slate-50 p-4"
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="text-base font-bold text-slate-900">
+                    {event.title}
+                  </Text>
+                  <Text className="mt-1 text-sm text-slate-500">
+                    {event.date} • {event.time}
+                  </Text>
+                </View>
+
+                <View className={`rounded-full px-3 py-1 ${typeStyles[event.type]}`}>
+                  <Text className="text-xs font-semibold">{event.type}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View className="mx-5 mt-5 rounded-3xl bg-white p-4 shadow-sm">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-xl font-bold text-slate-900">Resources</Text>
+              <Text className="text-sm text-slate-500">
+                Documents, guides, prep sheets, and forms
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={openAddResource}
+              className="rounded-2xl bg-slate-900 px-4 py-3"
+            >
+              <Text className="font-semibold text-white">Add Resource</Text>
+            </Pressable>
+          </View>
+
+          <View className="mt-4">
+            {resources.map((resource) => (
+              <View
+                key={resource.id}
+                className="mb-3 rounded-3xl border border-slate-200 bg-slate-50 p-4"
+              >
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1 pr-3">
+                    <View className="flex-row items-center gap-2">
+                      <Text className="text-lg font-bold text-slate-900">
+                        {resource.title}
+                      </Text>
+                      <View
+                        className={`rounded-full px-3 py-1 ${resourceStyles[resource.category]}`}
+                      >
+                        <Text className="text-xs font-semibold">
+                          {resource.category}
                         </Text>
                       </View>
-                      <Ionicons
-                        name="megaphone-outline"
-                        size={16}
-                        color="#7B8CA8"
-                      />
                     </View>
-                    <Text className="mt-3 text-xl font-bold leading-7 text-[#1E2535]">
-                      {item.title}
+
+                    <Text className="mt-2 text-sm leading-5 text-slate-500">
+                      {resource.description}
                     </Text>
-                    <Text className="mt-2 text-base leading-6 text-[#637590]">
-                      {item.body}
+
+                    <Text className="mt-2 text-xs text-slate-400">
+                      Updated {resource.updatedAt}
                     </Text>
                   </View>
-                ))
-              : null}
+
+                  <View className="gap-2">
+                    <Pressable
+                      onPress={() => openEditResource(resource)}
+                      className="rounded-xl bg-white px-3 py-2"
+                    >
+                      <Text className="font-medium text-slate-700">Edit</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => deleteResource(resource.id)}
+                      className="rounded-xl bg-red-50 px-3 py-2"
+                    >
+                      <Text className="font-medium text-red-600">Delete</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ))}
           </View>
         </View>
       </ScrollView>
 
       <Modal
-        visible={calendarVisible}
+        visible={eventModalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setCalendarVisible(false)}
+        onRequestClose={() => setEventModalVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/35">
-          <Pressable className="flex-1" onPress={() => setCalendarVisible(false)} />
+        <View className="flex-1 justify-end bg-black/40">
+          <View className="rounded-t-[32px] bg-white p-5">
+            <Text className="text-2xl font-bold text-slate-900">
+              {editingEventId ? "Edit Event" : "Add Event"}
+            </Text>
 
-          <View className="rounded-t-3xl bg-white px-6 pb-8 pt-5">
-            <View className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[#D8E1F0]" />
+            <View className="mt-4 gap-3">
+              <TextInput
+                value={eventForm.title}
+                onChangeText={(text) => setEventForm((prev) => ({ ...prev, title: text }))}
+                placeholder="Event title"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
 
-            <View className="flex-row items-center justify-between">
-              <View>
-                <Text className="text-xl font-bold text-[#1E2535]">
-                  {STATE_LEADERSHIP_CONFERENCE.title}
-                </Text>
-                <Text className="mt-1 text-sm text-[#6A7892]">
-                  Mar 18–21, 2027 • Event Calendar
-                </Text>
-              </View>
+              <TextInput
+                value={eventForm.date}
+                onChangeText={(text) => setEventForm((prev) => ({ ...prev, date: text }))}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
 
-              <Pressable
-                onPress={() => setCalendarVisible(false)}
-                className="h-10 w-10 items-center justify-center rounded-full bg-[#F3F6FB]"
-              >
-                <Ionicons name="close" size={18} color="#4A5A77" />
-              </Pressable>
+              <TextInput
+                value={eventForm.time}
+                onChangeText={(text) => setEventForm((prev) => ({ ...prev, time: text }))}
+                placeholder="Time"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+
+              <TextInput
+                value={eventForm.location}
+                onChangeText={(text) => setEventForm((prev) => ({ ...prev, location: text }))}
+                placeholder="Location"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+
+              <TextInput
+                value={eventForm.type}
+                onChangeText={(text) =>
+                  setEventForm((prev) => ({
+                    ...prev,
+                    type: (text as EventItem["type"]) || "Event",
+                  }))
+                }
+                placeholder="Event / Competition / Reminder"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+
+              <TextInput
+                value={eventForm.description}
+                onChangeText={(text) =>
+                  setEventForm((prev) => ({ ...prev, description: text }))
+                }
+                placeholder="Description"
+                placeholderTextColor="#94a3b8"
+                multiline
+                className="min-h-[110px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+                textAlignVertical="top"
+              />
             </View>
 
-            <View className="mt-4 gap-2">
-              {EVENT_CALENDAR.map((item) => (
-                <View
-                  key={item.day}
-                  className="rounded-xl border border-[#E2E9F4] bg-white px-4 py-3"
-                >
-                  <Text className="text-sm font-semibold text-[#365EEB]">
-                    {item.day}
-                  </Text>
-                  <Text className="mt-1 text-sm text-[#5E708C]">{item.label}</Text>
-                </View>
-              ))}
+            <View className="mt-5 flex-row gap-3">
+              <Pressable
+                onPress={() => setEventModalVisible(false)}
+                className="flex-1 rounded-2xl bg-slate-100 py-4"
+              >
+                <Text className="text-center font-semibold text-slate-700">
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={saveEvent}
+                className="flex-1 rounded-2xl bg-slate-900 py-4"
+              >
+                <Text className="text-center font-semibold text-white">
+                  Save
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={resourceModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setResourceModalVisible(false)}
+      >
+        <View className="flex-1 justify-end bg-black/40">
+          <View className="rounded-t-[32px] bg-white p-5">
+            <Text className="text-2xl font-bold text-slate-900">
+              {editingResourceId ? "Edit Resource" : "Add Resource"}
+            </Text>
+
+            <View className="mt-4 gap-3">
+              <TextInput
+                value={resourceForm.title}
+                onChangeText={(text) =>
+                  setResourceForm((prev) => ({ ...prev, title: text }))
+                }
+                placeholder="Resource title"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+
+              <TextInput
+                value={resourceForm.category}
+                onChangeText={(text) =>
+                  setResourceForm((prev) => ({
+                    ...prev,
+                    category: (text as ResourceItem["category"]) || "Guide",
+                  }))
+                }
+                placeholder="Guide / Document / Form / Competition Prep"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+
+              <TextInput
+                value={resourceForm.updatedAt}
+                onChangeText={(text) =>
+                  setResourceForm((prev) => ({ ...prev, updatedAt: text }))
+                }
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#94a3b8"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+              />
+
+              <TextInput
+                value={resourceForm.description}
+                onChangeText={(text) =>
+                  setResourceForm((prev) => ({ ...prev, description: text }))
+                }
+                placeholder="Description"
+                placeholderTextColor="#94a3b8"
+                multiline
+                className="min-h-[120px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900"
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View className="mt-5 flex-row gap-3">
+              <Pressable
+                onPress={() => setResourceModalVisible(false)}
+                className="flex-1 rounded-2xl bg-slate-100 py-4"
+              >
+                <Text className="text-center font-semibold text-slate-700">
+                  Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={saveResource}
+                className="flex-1 rounded-2xl bg-slate-900 py-4"
+              >
+                <Text className="text-center font-semibold text-white">
+                  Save
+                </Text>
+              </Pressable>
             </View>
           </View>
         </View>
       </Modal>
     </SafeAreaView>
-    </SwipeScreen>
-  )
+  );
 }

@@ -27,6 +27,7 @@ type UserRow = {
   first_name: string | null
   last_name: string | null
   image_url: string | null
+  state: string | null
   created_at: string
   updated_at: string
 }
@@ -34,7 +35,7 @@ type UserRow = {
 export default function ProfileScreen() {
   const { user, isLoaded, isSignedIn } = useUser()
   const { signOut } = useClerk()
-
+const [stateValue, setStateValue] = useState('')
   const [dbUser, setDbUser] = useState<UserRow | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -203,19 +204,19 @@ const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     },
   ]
 
-  const openEditProfile = () => {
-    setFirstName(dbUser?.first_name ?? user?.firstName ?? '')
-    setLastName(dbUser?.last_name ?? user?.lastName ?? '')
-    setEmail(
-      dbUser?.email ??
-        user?.primaryEmailAddress?.emailAddress ??
-        user?.emailAddresses?.[0]?.emailAddress ??
-        ''
-    )
-    setImageUrlInput(dbUser?.image_url ?? user?.imageUrl ?? '')
-    setEditOpen(true)
-  }
-
+const openEditProfile = () => {
+  setFirstName(dbUser?.first_name ?? user?.firstName ?? '')
+  setLastName(dbUser?.last_name ?? user?.lastName ?? '')
+  setEmail(
+    dbUser?.email ??
+      user?.primaryEmailAddress?.emailAddress ??
+      user?.emailAddresses?.[0]?.emailAddress ??
+      ''
+  )
+  setImageUrlInput(dbUser?.image_url ?? user?.imageUrl ?? '')
+  setStateValue(dbUser?.state ?? '')
+  setEditOpen(true)
+}
   const pickAndUploadProfileImage = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -292,13 +293,16 @@ const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const cleanEmail = email.trim() || null
       const cleanImageUrl = imageUrlInput.trim() || null
 
-      const updatePayload = {
-        email: cleanEmail,
-        first_name: cleanFirstName,
-        last_name: cleanLastName,
-        image_url: cleanImageUrl,
-        updated_at: new Date().toISOString(),
-      }
+     const cleanState = stateValue.trim().toUpperCase() || null
+
+const updatePayload = {
+  email: cleanEmail,
+  first_name: cleanFirstName,
+  last_name: cleanLastName,
+  image_url: cleanImageUrl,
+  state: cleanState,
+  updated_at: new Date().toISOString(),
+}
 
       const { data: updatedRow, error: updateError } = await supabase
         .from('users')
@@ -588,6 +592,15 @@ const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
                   keyboardType="email-address"
                   className="mb-4 rounded-2xl border border-slate-200 px-4 py-4 text-slate-900"
                 />
+                <Text className="mb-2 text-sm font-medium text-slate-700">State</Text>
+<TextInput
+  value={stateValue}
+  onChangeText={(text) => setStateValue(text.toUpperCase())}
+  placeholder="State (ex. AZ)"
+  autoCapitalize="characters"
+  maxLength={2}
+  className="mb-4 rounded-2xl border border-slate-200 px-4 py-4 text-slate-900"
+/>
 
                 <Pressable
                   onPress={saveProfile}
